@@ -16,7 +16,8 @@ import qualified MLIR.Native.ExecutionEngine as MLIR
 import qualified MLIR.Native as MLIR
 
 import qualified MLIR.AST.Dialect.Arith as Arith
-import qualified MLIR.AST.Dialect.Std as Std
+-- <<JC>> import qualified MLIR.AST.Dialect.Std as Std
+import qualified MLIR.AST.Dialect.Func as Std
 import qualified MLIR.AST.Dialect.Affine as Affine
 import qualified MLIR.AST.Dialect.MemRef as MemRef
 import qualified MLIR.AST.Dialect.LLVM as LLVM
@@ -245,7 +246,8 @@ translateToMLIR opts tu = do
                        MLIR.addConvertSCFToStandardPass  pm
                        MLIR.addConvertMemRefToLLVMPass   pm
                        MLIR.addConvertVectorToLLVMPass   pm
-                       MLIR.addConvertStandardToLLVMPass pm
+                       -- <<JC>> MLIR.addConvertStandardToLLVMPass pm
+                       MLIR.addConvertFuncToLLVMPass pm
                        MLIR.addConvertReconcileUnrealizedCastsPass pm
                      when (simplize opts) $ do
                        MLIR.addTransformsCanonicalizerPass pm
@@ -756,18 +758,18 @@ transExpr (CComma es _) = do
   let ty = last bs ^._2
   return (join (bs ^..traverse._1), ty)
 
--- translate select expression
-transExpr (CCond cond (Just lhs) rhs node) = do
-  (condBs, (condTy, condSign, condTn)) <- transExpr cond
-  (lhsBs, (lhsTy, lhsSign, lhsTn)) <- transExpr lhs
-  (rhsBs, (rhsTy, rhsSign, rhsTn)) <- transExpr rhs
-  id <- freshName
-  let sel = id AST.:= Std.Select (getPos node)
-                        lhsTy (lastId node condBs)
-                        (lastId node lhsBs)
-                        (lastId node rhsBs)
-  return (condBs ++ lhsBs ++ rhsBs ++
-          [Left sel, Right id], (lhsTy, lhsSign, lhsTn))
+-- <<JC>> -- translate select expression
+-- <<JC>> transExpr (CCond cond (Just lhs) rhs node) = do
+-- <<JC>>   (condBs, (condTy, condSign, condTn)) <- transExpr cond
+-- <<JC>>   (lhsBs, (lhsTy, lhsSign, lhsTn)) <- transExpr lhs
+-- <<JC>>   (rhsBs, (rhsTy, rhsSign, rhsTn)) <- transExpr rhs
+-- <<JC>>   id <- freshName
+-- <<JC>>   let sel = id AST.:= Std.Select (getPos node)
+-- <<JC>>                         lhsTy (lastId node condBs)
+-- <<JC>>                         (lastId node lhsBs)
+-- <<JC>>                         (lastId node rhsBs)
+-- <<JC>>   return (condBs ++ lhsBs ++ rhsBs ++
+-- <<JC>>           [Left sel, Right id], (lhsTy, lhsSign, lhsTn))
 
 -- translate array index acccess
 transExpr ind@(CIndex e index node) = do

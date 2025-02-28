@@ -1,5 +1,7 @@
 # c-mlir
 
+(The submodule mlir-hs is a branch from google's mlir-hs llvm-15 branch itself. Apparently, it requires a llvm-15 build to work. I used llvm-15 release source code to build. Check README.md in the submodule to see how to build llvm-15 for this git repo.)
+
 ## A translator from c to MLIR
 
 Only a subset of c is supported based on the current semantics of MLIR dialects.

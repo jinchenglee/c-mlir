@@ -12,6 +12,7 @@ import Data.Maybe
 import Data.List
 import CMLIR.Parser
 import CMLIR.Translator
+-- import qualified CMLIR.Translator as T
 
 shouldBeTranslatedAs code ir = do
   let ast = processString code
@@ -19,9 +20,16 @@ shouldBeTranslatedAs code ir = do
               Left errs -> return $ show errs
               Right ast -> do
                 ir <- translateToMLIR defaultOptions{simplize=False} ast
+                -- let opt = T.Options {T.toLLVM = False, T.dumpLoc = False, T.jits = [], T.simplize = False}
+                -- ir <- T.translateToMLIR opt ast
                 case ir of
                   Left err -> return err
                   Right ir -> return ir
+
+  -- Print the processed IR for debugging
+  -- putStrLn "Processed IR:"
+  -- putStrLn output
+
   removeEmptyLines (BU.fromString output) `shouldBe` removeEmptyLines ir
   where removeEmptyLines s = 
           BS.intercalate "\n" [l | l <- BS.split (fromIntegral $ ord '\n') s, 
@@ -30,6 +38,7 @@ shouldBeTranslatedAs code ir = do
 spec :: Spec
 spec = do
   describe "translator" $ do
+
     it "can translate builtin types" $ do
       [r|
 void foo() {
@@ -45,8 +54,8 @@ void foo() {
   double v9;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi8>
     %c1_0 = arith.constant 1 : index
@@ -71,15 +80,15 @@ module  {
   }
 }
       |]
-    
+
     it "can translate static array types" $ do
       [r|
 void foo() {
   int v0[4][5];
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<4x5xi32>
     return
   }
@@ -96,8 +105,8 @@ void foo() {
 #map0 = affine_map<() -> (2)>
 #map1 = affine_map<() -> (1)>
 #map2 = affine_map<() -> (3)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<4x5xi32>
     %c2_i32 = arith.constant 2 : i32
     %c1_i32 = arith.constant 1 : i32
@@ -128,8 +137,8 @@ void foo() {
   double v4 = 0.1L;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c97_i8 = arith.constant 97 : i8
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi8>
@@ -171,8 +180,8 @@ void foo() {
   v0 % v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -218,8 +227,8 @@ void foo() {
   v0 % v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -265,8 +274,8 @@ void foo() {
   v0 % v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xf32>
     %c1_0 = arith.constant 1 : index
@@ -313,8 +322,8 @@ void foo() {
   v0 <= v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -366,8 +375,8 @@ void foo() {
   v0 <= v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -415,8 +424,8 @@ void foo() {
   v0 == v1 || v0 == v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -461,8 +470,8 @@ void foo() {
   i |= 1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c0 = arith.constant 0 : index
@@ -517,8 +526,8 @@ module  {
 void foo(int arg0, float arg1) {
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo(%arg0: i32, %arg1: f32) attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo(%arg0: i32, %arg1: f32) attributes {llvm.emit_c_interface} {
     %0 = arith.index_cast %arg0 : i32 to index
     return
   }
@@ -534,12 +543,12 @@ void foo(int arg0, float arg1) {
   bar(arg0);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @bar(%arg0: i32) -> i32 attributes {llvm.emit_c_interface} {
+module {
+  func.func @bar(%arg0: i32) -> i32 attributes {llvm.emit_c_interface} {
     %0 = arith.index_cast %arg0 : i32 to index
     return %arg0 : i32
   }
-  func @foo(%arg0: i32, %arg1: f32) attributes {llvm.emit_c_interface} {
+  func.func @foo(%arg0: i32, %arg1: f32) attributes {llvm.emit_c_interface} {
     %0 = arith.index_cast %arg0 : i32 to index
     %1 = call @bar(%arg0) : (i32) -> i32
     return
@@ -554,9 +563,9 @@ void foo(int arg0, float arg1) {
   bar(arg0) + 1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func private @bar(i32) -> i32
-  func @foo(%arg0: i32, %arg1: f32) attributes {llvm.emit_c_interface} {
+module {
+  func.func private @bar(i32) -> i32
+  func.func @foo(%arg0: i32, %arg1: f32) attributes {llvm.emit_c_interface} {
     %0 = arith.index_cast %arg0 : i32 to index
     %1 = call @bar(%arg0) : (i32) -> i32
     %c1_i32 = arith.constant 1 : i32
@@ -576,8 +585,8 @@ void foo() {
 #map0 = affine_map<() -> (0)>
 #map1 = affine_map<() -> (10)>
 #map2 = affine_map<(d0) -> (d0)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = affine.apply #map0()
     %1 = affine.apply #map1()
     affine.for %arg0 = #map2(%0) to #map2(%1) step 2 {
@@ -596,8 +605,8 @@ void foo() {
   }
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c0_i32 = arith.constant 0 : i32
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
@@ -625,8 +634,8 @@ void foo() {
   }
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c0_i32 = arith.constant 0 : i32
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
@@ -661,8 +670,8 @@ void foo() {
   }
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c0_i32 = arith.constant 0 : i32
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
@@ -697,8 +706,8 @@ void foo() {
   } while (i<10);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c0_i32 = arith.constant 0 : i32
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
@@ -739,8 +748,8 @@ void foo() {
   }
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -766,8 +775,8 @@ void foo() {
   }
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -797,8 +806,8 @@ void foo() {
 #map0 = affine_map<() -> (0)>
 #map1 = affine_map<() -> (10)>
 #map2 = affine_map<(d0) -> (d0)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -832,8 +841,8 @@ void foo() {
 #map2 = affine_map<(d0) -> (d0)>
 #map3 = affine_map<(d0) -> (0)>
 #map4 = affine_map<(d0) -> (10)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = affine.apply #map0()
     %1 = affine.apply #map1()
     affine.for %arg0 = #map2(%0) to #map2(%1) {
@@ -862,8 +871,8 @@ void foo() {
 #map0 = affine_map<() -> (0)>
 #map1 = affine_map<() -> (10)>
 #map2 = affine_map<(d0) -> (d0)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -920,8 +929,8 @@ void foo() {
   (long)v5;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi8>
     %c1_0 = arith.constant 1 : index
@@ -1034,8 +1043,8 @@ void foo() {
   (double)v5;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi8>
     %c1_0 = arith.constant 1 : index
@@ -1103,8 +1112,8 @@ void foo() {
   v0--;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c0 = arith.constant 0 : index
@@ -1155,8 +1164,8 @@ void foo() {
   -v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c0 = arith.constant 0 : index
@@ -1184,8 +1193,8 @@ void foo() {
   ! (v0 == v0);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c0 = arith.constant 0 : index
@@ -1209,8 +1218,8 @@ void foo() {
   *v0 + 1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xmemref<?xi32>>
     %c0 = arith.constant 0 : index
@@ -1233,8 +1242,8 @@ void foo() {
       |] `shouldBeTranslatedAs` [r|
 #map0 = affine_map<() -> (1)>
 #map1 = affine_map<() -> (0)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xmemref<?xi32>>
     %c0 = arith.constant 0 : index
@@ -1261,8 +1270,8 @@ void main() {
   *a = 1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @main() attributes {llvm.emit_c_interface} {
+module {
+  func.func @main() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xmemref<?xi32>>
     %c0 = arith.constant 0 : index
@@ -1283,8 +1292,8 @@ void foo() {
   a = b;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xmemref<?xi8>>
     %c1_0 = arith.constant 1 : index
@@ -1305,8 +1314,8 @@ void foo() {
   (int[3])v0;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xmemref<?xi32>>
     %c0 = arith.constant 0 : index
@@ -1324,8 +1333,8 @@ void foo() {
   (int [8])b;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xmemref<?xi8>>
     %c0 = arith.constant 0 : index
@@ -1349,8 +1358,8 @@ void foo(enum test a) {
   v0 = B;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo(%arg0: i32) attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo(%arg0: i32) attributes {llvm.emit_c_interface} {
     %0 = arith.index_cast %arg0 : i32 to index
     %c0_i32 = arith.constant 0 : i32
     %c1 = arith.constant 1 : index
@@ -1378,8 +1387,8 @@ void foo(float* input) {
 #map0 = affine_map<() -> (0)>
 #map1 = affine_map<() -> (100)>
 #map2 = affine_map<(d0) -> (d0)>
-module  {
-  func @foo(%arg0: memref<?xf32>) attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo(%arg0: memref<?xf32>) attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<100xf32>
     %1 = affine.apply #map0()
     %2 = affine.apply #map1()
@@ -1415,8 +1424,8 @@ __kernel void foo(__global float* input, __local float *a) {
 #map0 = affine_map<() -> (0)>
 #map1 = affine_map<() -> (100)>
 #map2 = affine_map<(d0) -> (d0)>
-module  {
-  func @foo(%arg0: memref<?xf32, 2>, %arg1: memref<?xf32, 1>) attributes {cl.kernel = true, llvm.emit_c_interface} {
+module {
+  func.func @foo(%arg0: memref<?xf32, 2>, %arg1: memref<?xf32, 1>) attributes {cl.kernel = true, llvm.emit_c_interface} {
     %0 = affine.apply #map0()
     %1 = affine.apply #map1()
     affine.for %arg2 = #map2(%0) to #map2(%1) {
@@ -1445,8 +1454,8 @@ void foo() {
   int a[2] = {1,2};
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1_i32 = arith.constant 1 : i32
     %c2_i32 = arith.constant 2 : i32
     %0 = memref.alloca() : memref<2xi32>
@@ -1466,8 +1475,8 @@ void foo() {
   free(v);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c10_i32 = arith.constant 10 : i32
     %0 = arith.index_cast %c10_i32 : i32 to index
     %1 = memref.alloc(%0) : memref<?xi8>
@@ -1490,8 +1499,8 @@ void foo() {
   char *c = (char *)b;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<10xi8>
     %c0 = arith.constant 0 : index
     %1 = memref.dim %0, %c0 : memref<10xi8>
@@ -1527,8 +1536,8 @@ void foo(int i) {
 #map5 = affine_map<(d0)[s0] -> (0)>
 #map6 = affine_map<(d0)[s0] -> (10)>
 #map7 = affine_map<(d0)[s0] -> (d1)>
-module  {
-  func @foo(%arg0: i32) attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo(%arg0: i32) attributes {llvm.emit_c_interface} {
     %0 = arith.index_cast %arg0 : i32 to index
     %1 = memref.alloca() : memref<10xi32>
     %c1_i32 = arith.constant 1 : i32
@@ -1566,8 +1575,8 @@ void foo() {
   int output[2][3][2] = {{{1,2},{3,4},{5,6}},{{7,8},{9,10},{11,12}}};
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %cst = arith.constant 1.000000e+00 : f32
     %cst_0 = arith.constant 2.000000e+00 : f32
     %cst_1 = arith.constant 3.000000e+00 : f32
@@ -1681,8 +1690,8 @@ void foo() {
   const int v3[2] = {1,2};
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_i32 = arith.constant 1 : i32
@@ -1708,8 +1717,8 @@ void foo() {
   memcpy(dst, src);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<2xi32>
     %1 = memref.alloca() : memref<2xi32>
     memref.copy %0, %1 : memref<2xi32> to memref<2xi32>
@@ -1728,8 +1737,8 @@ void foo() {
 }
       |] `shouldBeTranslatedAs` [r|
 #map = affine_map<() -> (1)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<2xi32>
     %1 = memref.alloca() : memref<2xi32>
     %2 = memref.alloca() : memref<1xi32>
@@ -1752,8 +1761,8 @@ void foo() {
 }
       |] `shouldBeTranslatedAs` [r|
 #map = affine_map<() -> (1)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<1xi32>
     %1 = affine.apply #map()
     %c1_i32 = arith.constant 1 : i32
@@ -1774,8 +1783,8 @@ void foo() {
   dma_start(src[index], dst[1], tag[1], 1);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<2xi32>
     %1 = memref.alloca() : memref<2xi32>
     %2 = memref.alloca() : memref<1xi32>
@@ -1807,8 +1816,8 @@ void foo() {
   dma_wait(tag[index], 1);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<1xi32>
     %c0_i32 = arith.constant 0 : i32
     %c1 = arith.constant 1 : index
@@ -1847,8 +1856,8 @@ void foo() {
 #map0 = affine_map<() -> (0)>
 #map1 = affine_map<() -> (10)>
 #map2 = affine_map<(d0) -> (d0)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -1885,8 +1894,8 @@ void foo() {
   *v1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -2023,8 +2032,8 @@ void foo() {
 
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xvector<2xi8>>
     %c1_0 = arith.constant 1 : index
@@ -2142,8 +2151,8 @@ void foo() {
   v2 + v3;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xvector<2xi8>>
     %c1_0 = arith.constant 1 : index
@@ -2178,8 +2187,8 @@ void foo() {
   vstore(v0, v1[0]);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xvector<2xi32>>
     %1 = memref.alloca() : memref<2xi32>
@@ -2204,8 +2213,8 @@ void foo() {
   char *v = "aaa";
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %cst = arith.constant dense<97> : vector<3xi8>
     %c3 = arith.constant 3 : index
     %c0 = arith.constant 0 : index
@@ -2226,8 +2235,8 @@ void foo() {
   float *a = (float *)malloc(10);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c10_i32 = arith.constant 10 : i32
     %0 = arith.index_cast %c10_i32 : i32 to index
     %1 = memref.alloc(%0) : memref<?xi8>
@@ -2252,8 +2261,8 @@ void foo() {
   (int [10][10])c;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<10x10xi32>
     %c1 = arith.constant 1 : index
     %c0 = arith.constant 0 : index
@@ -2299,12 +2308,12 @@ void main() {
 }
       |] `shouldBeTranslatedAs` [r|
 #map = affine_map<() -> (0)>
-module  {
+module {
   func private @launch(memref<?xi8>, i32, i32, memref<?xmemref<?xi8>>)
-  func @foo(%arg0: memref<?xf32, 2>) attributes {cl.kernel = true, llvm.emit_c_interface} {
+  func.func @foo(%arg0: memref<?xf32, 2>) attributes {cl.kernel = true, llvm.emit_c_interface} {
     return
   }
-  func @main() attributes {llvm.emit_c_interface} {
+  func.func @main() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<1xmemref<?xi8>>
     %c10_i32 = arith.constant 10 : i32
     %1 = arith.index_cast %c10_i32 : i32 to index
@@ -2341,8 +2350,8 @@ void foo() {
   conv_1d_nwc_wcf(lhs, rhs, output, 1, 1);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<3x4x5xf32>
     %1 = memref.alloca() : memref<1x5x1xf32>
     %2 = memref.alloca() : memref<3x4x1xf32>
@@ -2361,8 +2370,8 @@ void foo() {
   conv_1d(lhs, rhs, output);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<3xf32>
     %1 = memref.alloca() : memref<1xf32>
     %2 = memref.alloca() : memref<3xf32>
@@ -2381,8 +2390,8 @@ void foo() {
   conv_2d_nchw_fchw(lhs, rhs, output, 1, 1, 1, 1);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<3x4x5x6xf32>
     %1 = memref.alloca() : memref<1x4x1x1xf32>
     %2 = memref.alloca() : memref<3x1x5x6xf32>
@@ -2401,8 +2410,8 @@ void foo() {
   conv_2d_nhwc_hwcf(lhs, rhs, output, 1, 1, 1, 1);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<3x4x5x6xf32>
     %1 = memref.alloca() : memref<1x1x6x1xf32>
     %2 = memref.alloca() : memref<3x4x5x1xf32>
@@ -2421,8 +2430,8 @@ void foo() {
   conv_2d(lhs, rhs, output);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<3x4xf32>
     %1 = memref.alloca() : memref<1x1xf32>
     %2 = memref.alloca() : memref<3x4xf32>
@@ -2457,8 +2466,8 @@ void foo() {
   tanh(1.0);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %cst = arith.constant 1.000000e+00 : f32
     %0 = math.abs %cst : f32
     %cst_0 = arith.constant 1.000000e+00 : f32
@@ -2522,8 +2531,8 @@ void foo() {
   a.f1 = 1;
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1_i32 = arith.constant 1 : i32
     %c2_i32 = arith.constant 2 : i32
     %0 = memref.alloca() : memref<2xi32>
@@ -2554,8 +2563,8 @@ void foo() {
   i = sizeof(int);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -2580,8 +2589,8 @@ void foo() {
   i = alignof(int);
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %0 = memref.alloca(%c1) : memref<?xi32>
     %c1_0 = arith.constant 1 : index
@@ -2607,8 +2616,8 @@ void foo() {
 #map0 = affine_map<(d0, d1)[s0, s1] -> (d1 + s0 + d0 * s1)>
 #map1 = affine_map<() -> (1)>
 #map2 = affine_map<() -> (2)>
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<10x20xi32>
     %c0_i32 = arith.constant 0 : i32
     %c10_i32 = arith.constant 10 : i32
@@ -2648,8 +2657,8 @@ void foo() {
     transpose(a, 1, 0, 2); 
 }
       |] `shouldBeTranslatedAs` [r|
-module  {
-  func @foo() attributes {llvm.emit_c_interface} {
+module {
+  func.func @foo() attributes {llvm.emit_c_interface} {
     %0 = memref.alloca() : memref<10x20x30xi32>
     %c1_i32 = arith.constant 1 : i32
     %c0_i32 = arith.constant 0 : i32

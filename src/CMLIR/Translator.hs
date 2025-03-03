@@ -16,7 +16,6 @@ import qualified MLIR.Native.ExecutionEngine as MLIR
 import qualified MLIR.Native as MLIR
 
 import qualified MLIR.AST.Dialect.Arith as Arith
--- <<JC>> import qualified MLIR.AST.Dialect.Std as Std
 import qualified MLIR.AST.Dialect.Func as Std
 import qualified MLIR.AST.Dialect.Affine as Affine
 import qualified MLIR.AST.Dialect.MemRef as MemRef
@@ -56,8 +55,10 @@ import qualified Data.Vector.Storable as V
 import Data.Char (ord)
 import qualified Data.List as L
 import qualified Data.Map as M
-import Debug.Trace
+import Debug.Trace (trace, traceM)
 import Foreign (withForeignPtr)
+
+
 
 type SType = (AST.Type, Bool, Maybe SUERef)
 
@@ -252,7 +253,7 @@ translateToMLIR opts tu = do
                        MLIR.addConvertSCFToStandardPass  pm
                        MLIR.addConvertMemRefToLLVMPass   pm
                        MLIR.addConvertVectorToLLVMPass   pm
-                       -- <<JC>> MLIR.addConvertStandardToLLVMPass pm
+                       MLIR.addConvertControlFlowToLLVMPass pm
                        MLIR.addConvertFuncToLLVMPass pm
                        MLIR.addConvertReconcileUnrealizedCastsPass pm
                      when (simplize opts) $ do
@@ -814,18 +815,18 @@ transExpr (CComma es _) = do
   let ty = last bs ^._2
   return (join (bs ^..traverse._1), ty)
 
--- <<JC>> -- translate select expression
--- <<JC>> transExpr (CCond cond (Just lhs) rhs node) = do
--- <<JC>>   (condBs, (condTy, condSign, condTn)) <- transExpr cond
--- <<JC>>   (lhsBs, (lhsTy, lhsSign, lhsTn)) <- transExpr lhs
--- <<JC>>   (rhsBs, (rhsTy, rhsSign, rhsTn)) <- transExpr rhs
--- <<JC>>   id <- freshName
--- <<JC>>   let sel = id AST.:= Std.Select (getPos node)
--- <<JC>>                         lhsTy (lastId node condBs)
--- <<JC>>                         (lastId node lhsBs)
--- <<JC>>                         (lastId node rhsBs)
--- <<JC>>   return (condBs ++ lhsBs ++ rhsBs ++
--- <<JC>>           [Left sel, Right id], (lhsTy, lhsSign, lhsTn))
+-- translate select expression
+transExpr (CCond cond (Just lhs) rhs node) = do
+  (condBs, (condTy, condSign, condTn)) <- transExpr cond
+  (lhsBs, (lhsTy, lhsSign, lhsTn)) <- transExpr lhs
+  (rhsBs, (rhsTy, rhsSign, rhsTn)) <- transExpr rhs
+  id <- freshName
+  let sel = id AST.:= LLVM.Select (getPos node)
+                        lhsTy (lastId node condBs)
+                        (lastId node lhsBs)
+                        (lastId node rhsBs)
+  return (condBs ++ lhsBs ++ rhsBs ++
+          [Left sel, Right id], (lhsTy, lhsSign, lhsTn))
 
 -- translate array index acccess
 transExpr ind@(CIndex e index node) = do

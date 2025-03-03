@@ -1,20 +1,28 @@
-int get_global_id(int);
+__attribute__((annotate("cpu1"))) int get_event_id(int);
 
-__kernel void GEMM(const int M, const int N, const int K,
+//__cpu1 void GEMM(const int M, const int N, const int K,
+__attribute__((annotate("cpu1"))) __kernel void GEMM(const int M, const int N, const int K,
                    const __global float* A,
                    const __global float* B,
                    __global float* C) {
     
     // Thread identifiers
-    const int globalRow = get_global_id(0); // Row ID of C (0..M)
-    const int globalCol = get_global_id(1); // Col ID of C (0..N)
+    const int event0 = get_event_id(0);
+    const int event1 = get_event_id(1);
  
-    // Compute a single element (loop over K)
-    float acc = 0.0f;
-    for (int k=0; k<K; k++) {
-        acc += A[k*M + globalRow] * B[globalCol*K + k];
+
+    // Iterate through rows of A
+    for (int i = 0; i < M; i++) {
+        // Iterate through columns of B
+        for (int j = 0; j < N; j++) {
+            // Initialize the current element of C
+            C[i * N + j] = 0.0f;
+            
+            // Dot product of row i of A with column j of B
+            for (int k = 0; k < K; k++) {
+                // A[i, k] * B[k, j]
+                C[i * N + j] += A[i * K + k] * B[k * N + j];
+            }
+        }
     }
- 
-    // Store the result
-    C[globalCol*M + globalRow] = acc;
 }

@@ -7,7 +7,7 @@ import Data.ByteString.UTF8
 
 call :: Location -> [Type] -> ByteString -> [Name] -> Operation
 call loc ty callee args = Operation
-  { opName = "std.call"
+  { opName = "func.call"
   , opLocation = loc
   , opResultTypes = Explicit ty
   , opOperands = args

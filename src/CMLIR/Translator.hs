@@ -61,6 +61,10 @@ import Foreign (withForeignPtr)
 
 type SType = (AST.Type, Bool, Maybe SUERef)
 
+-- Add a data type for function attributes
+data FunctionAttr = AnnotateAttr String
+  deriving (Show, Eq)
+
 data Env = Env {decls :: [Decl],
                 objDefs :: M.Map Position ObjDef,
                 funDefs :: [FunDef],
@@ -72,6 +76,7 @@ data Env = Env {decls :: [Decl],
                 enums :: M.Map String Integer,
                 vars :: M.Map String (BU.ByteString, SType, Bool),
                 kernels :: M.Map String Bool,
+                funcAnnotations :: M.Map String [FunctionAttr],
                 affineDimensions :: M.Map String (Int, BU.ByteString),
                 affineSymbols :: M.Map String (Int, BU.ByteString),
                 affineExprs :: M.Map String CExpr,
@@ -95,6 +100,7 @@ initEnv = Env{decls = [],
               enums = M.empty,
               vars = M.empty,
               kernels = M.empty,
+              funcAnnotations = M.empty,
               affineDimensions = M.empty,
               affineSymbols = M.empty,
               affineExprs = M.empty,
@@ -326,12 +332,55 @@ transGDecl decl@(Decl var node) = do
     case ty of
       AST.FunctionType argType resultTypes -> do
         let f = AST.FuncOp (getPos node) (BU.fromString name) ty $ AST.Region []
+        -- Get function attributes
+        attrs <- M.lookup name . funcAnnotations <$> getUserState
+        -- Apply function attributes
         isKernel <- M.lookup name . kernels <$> getUserState
         let f' = if isKernel ^. non False then
                    f{AST.opAttributes = AST.opAttributes f <> AST.namedAttribute "cl.kernel" (AST.BoolAttr True)}
                  else f
-        return [AST.Do f'{AST.opAttributes=AST.opAttributes f' <> AST.namedAttribute "sym_visibility" (AST.StringAttr "private")}]
+        -- Apply function attributes from C annotations
+        let finalF = case attrs of
+                       Just attrList -> applyFunctionAttrs f' attrList
+                       Nothing -> f'
+        
+        return [AST.Do finalF{AST.opAttributes=AST.opAttributes finalF <> AST.namedAttribute "sym_visibility" (AST.StringAttr "private")}]
       _ -> errMsg node "expected function type"
+
+-- Implementation of the extractAnnotateValues function
+-- This extracts annotate("value") from __attribute__((annotate("value")))
+extractAnnotateValues :: NodeInfo -> [CDeclSpec] -> [String]
+extractAnnotateValues _ = concatMap extractFromSpec
+  where
+    extractFromSpec :: CDeclSpec -> [String]
+    extractFromSpec (CTypeQual (CAttrQual (CAttr ident params _))) = 
+      if identName ident == "__attribute__" then
+        concatMap extractFromParam params
+      else []
+    extractFromSpec _ = []
+    
+    extractFromParam :: CExpr -> [String]
+    extractFromParam (CCall (CVar ident _) args _) =
+      if identName ident == "annotate" then
+        concatMap extractStringValue args
+      else []
+    extractFromParam _ = []
+    
+    extractStringValue :: CExpr -> [String]
+    extractStringValue (CConst (CStrConst (CString str _) _)) = [str]
+    extractStringValue _ = []
+
+
+-- Function to apply attribute to MLIR function - with ByteString conversion
+applyFunctionAttrs :: AST.Operation -> [FunctionAttr] -> AST.Operation
+applyFunctionAttrs op attrs = 
+  foldl applyAttr op attrs
+  where
+    applyAttr op (AnnotateAttr val) = 
+      let attrName = BU.fromString "target_domain"
+          attrValue = AST.StringAttr (BU.fromString val)
+      in op{AST.opAttributes = AST.opAttributes op <> AST.namedAttribute attrName attrValue}
+
 
 -- | Register all function types into env
 registerFunction :: Decl -> EnvM ()
@@ -362,11 +411,18 @@ transFunction f@(FunDef var stmt node) = do
                     [ (p ^._1, p ^._2._1, id ^._1) | p <- ps | id <- argIds]
     b <- transBlock argIds (join indBs) stmt []
     let f = emitted $ AST.FuncOp (getPos node) (BU.fromString name) ty $ AST.Region [b]
+    -- Get function attributes
+    attrs <- M.lookup name . funcAnnotations <$> getUserState
+    -- Apply kernel attributes if needed
     isKernel <- M.lookup name . kernels <$> getUserState
     let f' = if isKernel ^.non False then
                f{AST.opAttributes = AST.opAttributes f <> AST.namedAttribute "cl.kernel" (AST.BoolAttr True)}
              else f
-    return $ AST.Do f'
+    -- Apply function attributes from C annotations
+    let finalF = case attrs of
+                   Just attrList -> applyFunctionAttrs f' attrList
+                   Nothing -> f'
+    return $ AST.Do finalF
 
 -- | Translate a function block
 transBlock :: [(AST.Name, AST.Type)] -> [AST.Binding] -> CStatement NodeInfo -> [AST.Binding] -> EnvM AST.Block
@@ -1455,19 +1511,64 @@ transStr s@(CString str _) loc = do
 
 ------------------------------------------------------------------------------
 -- AST Handlers
-
 recordKernelFunctions :: CTranslUnit -> EnvM ()
 recordKernelFunctions (CTranslUnit decls _) = do
   forM_ decls $ \decl -> do
     case decl of
       CFDefExt (CFunDef declspecs declr oldstyle _ node) -> do
         declInfo <- analyseVarDecl' True declspecs declr oldstyle Nothing
-        let (VarDeclInfo vname _ storage _ _ _) = declInfo
+        let (VarDeclInfo vname _ storage _ _ attrs) = declInfo
             name = identName $ identOfVarName vname
-            kernel = case storage of
-                       ClKernelSpec -> True
-                       _ -> False
+        
+        -- Only process attributes for functions, not typedefs
+        unless (isTypedef declspecs) $
+          processAttrsInDeclSpecs name declspecs
+        
+        let kernel = case storage of
+                      ClKernelSpec -> True
+                      _ -> False
         modifyUserState (\s -> s{kernels=M.insert name kernel (kernels s)})
+
+      -- Handle function declarations
+      CDeclExt (CDecl declspecs [(Just declr, _, _)] node) -> do
+        -- Skip processing for typedefs
+        unless (isTypedef declspecs) $ do
+          -- Try to handle function declarations - only if it's a function type
+          declInfo <- analyseVarDecl' True declspecs declr [] Nothing
+          let (VarDeclInfo vname _ _ _ typ _) = declInfo
+          case typ of
+            FunctionType _ _ -> do
+              let name = identName $ identOfVarName vname
+              processAttrsInDeclSpecs name declspecs
+            _ -> return ()
+      
+      _ -> return ()
+  where
+    -- Helper function to check if declaration specifiers include typedef
+    isTypedef :: [CDeclSpec] -> Bool
+    isTypedef = any (\case 
+                      CStorageSpec (CTypedef _) -> True
+                      _ -> False)
+
+-- Process attributes in declaration specifiers without debug prints
+processAttrsInDeclSpecs :: String -> [CDeclSpec] -> EnvM ()
+processAttrsInDeclSpecs funcName declspecs = do
+  forM_ declspecs $ \spec -> do
+    case spec of
+      CTypeQual (CAttrQual attr) -> do
+        case attr of
+          CAttr ident params _ -> do
+            let identStr = identName ident
+            -- Handle direct annotate attributes
+            when (identStr == "annotate") $ do
+              -- Extract string value from annotate params
+              forM_ params $ \param -> do
+                case param of
+                  CConst (CStrConst (CString str _) _) -> do
+                    -- Add attribute to function annotations
+                    modifyUserState $ \s -> 
+                      s{funcAnnotations = M.insertWith (++) funcName [AnnotateAttr str] (funcAnnotations s)}
+                  _ -> return ()
       _ -> return ()
 
 handlers :: DeclEvent -> EnvM ()
